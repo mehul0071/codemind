@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-huggingface
+langgraph
+chromadb
+sentence-transformers
+gitpython
+python-dotenv
+pydantic
+python-multipart
+httpx
+tiktoken
+groq
+python-jose[cryptography]
+passlib
