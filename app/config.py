@@ -1,0 +1,17 @@
+from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Settings(BaseSettings):
+    GROQ_API_KEY: str
+    MODEL_NAME: str = "llama3-70b-8192"
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    VECTOR_DB_PATH: str = "vector_store"
+    DATA_PATH: str = "data"
+    DATABASE_URL:str = "postgresql+asyncpg://mehul:mehul0071@localhost:5432/codemind"
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
