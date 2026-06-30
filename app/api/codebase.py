@@ -4,18 +4,17 @@ from app.services.ingestion_service import IngestionService
 
 router = APIRouter()
 
-
 @router.post("/ingest_code")
-async def ingest_codebase(request=IngestRequest):
+async def ingest_codebase(request: IngestRequest):
     try:
         service = IngestionService()
-        result = service.ingest(request)
-        return {
-            "status": "success",
-            "data": result
-        }
+        result = await service.ingestion(request)
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Ingestion failed: {str(e)}"
+        )
     
 
 @router.get("/status/{session_id}")

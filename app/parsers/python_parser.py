@@ -93,7 +93,8 @@ class CodeElementVisitor(ast.NodeVisitor):
                 "line_end": getattr(node, 'end_lineno', node.lineno),
                 "file_path": self.file_path,
                 "metadata": {
-                    "args": [arg.arg for arg in node.args.args],
+                    # "args": [arg.arg for arg in node.args.args],
+                    "args": ", ".join(arg.arg for arg in node.args.args),
                     "language": "python"
                 }
             })
@@ -114,7 +115,8 @@ class CodeElementVisitor(ast.NodeVisitor):
                 "line_end": getattr(node, 'end_lineno', node.lineno),
                 "file_path": self.file_path,
                 "metadata": {
-                    "bases": [ast.unparse(base) for base in node.bases],
+                    # "bases": [ast.unparse(base) for base in node.bases],
+                    "bases": ", ".join(ast.unparse(base) for base in node.bases),
                     "language": "python"
                 }
             })

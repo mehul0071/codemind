@@ -24,15 +24,18 @@ class IngestionService:
 
         try:
             await self._update_repo_status(session_id, "pending", repo_name)
-
+            
             target_path = await self._prepare_repo(request)
             repo_name = os.path.basename(target_path)
-            parsed_elements = self.parser.parse_file(target_path)
+            parsed_elements = self.parser.parse_directory(target_path)
             documents = self.chunker.create_chunks(parsed_elements)
             chunk_count = self.vector_store.add_documents(documents, session_id)
 
-            await self.__update_repo_status(session_id, "completed", repo_name,
-                files_processed=len(parsed_elements),
+            files_processed = len(
+                {element["file_path"] for element in parsed_elements}
+            )
+            await self._update_repo_status(session_id, "completed", repo_name,
+                files_processed=files_processed,
                 chunks_created=chunk_count
             )
 
@@ -40,7 +43,7 @@ class IngestionService:
                 status="success",
                 message="code is successfully ingested in codemind",
                 session_id=session_id,
-                files_processed=len(parsed_elements),
+                files_processed=files_processed,
                 chunks_created=chunk_count,
                 repo_name=repo_name,
                 ingested_at=datetime.utcnow() 
@@ -64,7 +67,7 @@ class IngestionService:
 
             if os.path.exists(clone_path):
                 print(f"repo you are trying to clone is already cloned, repo already exists at {clone_path}")
-                return
+                return clone_path
         
             print(f"Cloning the requested repo{request.repo_url} ...")
             Repo.clone_from(request.repo_url, clone_path)
@@ -78,7 +81,7 @@ class IngestionService:
                                 chunks_created: int = 0):
         async with AsyncSessionLocal() as db:
             stmt = select(Repository).where(Repository.session_id == session_id)
-            result = db.execute(stmt)
+            result = await db.execute(stmt)
             repo = result.scalar_one_or_none()
 
             if not repo:
@@ -100,4 +103,6 @@ class IngestionService:
                     "files_processed": files_processed,
                     "chunks_created": chunks_created
                 }
+
             await db.commit()
+            await db.refresh(repo)

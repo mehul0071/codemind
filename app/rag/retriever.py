@@ -16,27 +16,28 @@ class CodeRetriever:
         self.client = chromadb.PersistentClient(path=settings.VECTOR_DB_PATH)
         self.collection_name = "codemind_codebase"
 
-    def _get_vectorstore(self, session_id: str = None) -> Chroma:
+
+    def _get_vectorstore(self, session_id: str) -> Chroma:
+        collection_name = f"session_{session_id}"
         return Chroma(
             client=self.client,
-            collection_name=self.collection_name,
+            collection_name=collection_name,
             embedding_function=self.embeddings,
         )
 
     async def retrieve(self, query: str, session_id: str, k: int = 8) -> List[Document]:
         try:
-            vectorstore = self._get_vectorstore()            
+            vectorstore = self._get_vectorstore(session_id)   # ← Pass session_id
+            
             docs = vectorstore.similarity_search(
                 query=query,
                 k=k,
-                filter={"session_id": session_id}
             )
-            
             return docs
-            
         except Exception as e:
             print(f"Error in retrieve: {e}")
             return []
+        
 
     async def retrieve_with_scores(self, query: str, session_id: str, k: int = 8) -> List[Tuple[Document, float]]:
         try:
