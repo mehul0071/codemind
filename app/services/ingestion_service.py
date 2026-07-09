@@ -1,14 +1,6 @@
 import os
 from git import Repo
 from app.config import settings
-from datetime import datetime
-from sqlalchemy import select
-from app.db.models.repository import Repository
-from app.parsers.python_parser import PythonParser
-from app.rag.chunker import CodeChunker
-from app.schemas.repository import IngestRequest, IngestResponse
-from app.vectorstore.chroma import ChromaVectorStore
-from app.db.sessions import AsyncSessionLocal
 from datetime import datetime, timezone
 from sqlalchemy import select, delete
 from app.db.models.repository import Repository
@@ -25,7 +17,6 @@ class IngestionService:
     def __init__(self):
         self.parser = PythonParser()
         self.chunker = CodeChunker()
-        self.vector_store = ChromaVectorStore()
         self.embeddings = HuggingFaceEmbeddings(
             model_name=settings.EMBEDDING_MODEL
         )
@@ -35,13 +26,6 @@ class IngestionService:
         repo_name = "unknown"
 
         try:
-            await self._update_repo_status(session_id, "pending", repo_name)
-            
-            target_path = await self._prepare_repo(request)
-            repo_name = os.path.basename(target_path)
-            parsed_elements = self.parser.parse_directory(target_path)
-            documents = self.chunker.create_chunks(parsed_elements)
-            chunk_count = self.vector_store.add_documents(documents, session_id)
             repo_id = await self._update_repo_status(session_id, "PENDING", repo_name)
             
             target_path = await self._prepare_repo(request)
@@ -83,7 +67,6 @@ class IngestionService:
             files_processed = len(
                 {element["file_path"] for element in parsed_elements}
             )
-            await self._update_repo_status(session_id, "completed", repo_name,
             await self._update_repo_status(session_id, "COMPLETED", repo_name,
                 files_processed=files_processed,
                 chunks_created=chunk_count
@@ -96,13 +79,11 @@ class IngestionService:
                 files_processed=files_processed,
                 chunks_created=chunk_count,
                 repo_name=repo_name,
-                ingested_at=datetime.utcnow() 
                 ingested_at=datetime.now(timezone.utc)
             )
 
         except Exception as e:
             print(f"code ingstion has failed in codemind , {e}")
-            await self._update_repo_status(session_id, "failed", repo_name)
             await self._update_repo_status(session_id, "FAILED", repo_name)
             raise
 
@@ -130,7 +111,6 @@ class IngestionService:
 
     async def _update_repo_status(self, session_id: str, status: str, 
                                 repo_name: str, files_processed: int = 0, 
-                                chunks_created: int = 0):
                                 chunks_created: int = 0) -> int:
         async with AsyncSessionLocal() as db:
             stmt = select(Repository).where(Repository.session_id == session_id)
@@ -159,5 +139,5 @@ class IngestionService:
 
             await db.commit()
             await db.refresh(repo)
-            await db.refresh(repo)
             return repo.id
+
