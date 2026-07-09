@@ -9,6 +9,10 @@ class RepositoryStatus(str, PyEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class Repository(Base):
