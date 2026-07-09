@@ -9,6 +9,15 @@ from app.rag.chunker import CodeChunker
 from app.schemas.repository import IngestRequest, IngestResponse
 from app.vectorstore.chroma import ChromaVectorStore
 from app.db.sessions import AsyncSessionLocal
+from datetime import datetime, timezone
+from sqlalchemy import select, delete
+from app.db.models.repository import Repository
+from app.db.models.document_chunk import DocumentChunk
+from app.parsers.python_parser import PythonParser
+from app.rag.chunker import CodeChunker
+from app.schemas.repository import IngestRequest, IngestResponse
+from app.db.sessions import AsyncSessionLocal
+from langchain_huggingface import HuggingFaceEmbeddings
 
 
 class IngestionService:
@@ -17,6 +26,9 @@ class IngestionService:
         self.parser = PythonParser()
         self.chunker = CodeChunker()
         self.vector_store = ChromaVectorStore()
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name=settings.EMBEDDING_MODEL
+        )
 
     async def ingestion(self, request: IngestRequest) -> IngestResponse:
         session_id = request.session_id
@@ -30,11 +42,49 @@ class IngestionService:
             parsed_elements = self.parser.parse_directory(target_path)
             documents = self.chunker.create_chunks(parsed_elements)
             chunk_count = self.vector_store.add_documents(documents, session_id)
+            repo_id = await self._update_repo_status(session_id, "PENDING", repo_name)
+            
+            target_path = await self._prepare_repo(request)
+            repo_name = os.path.basename(target_path)
+            
+            # Update status to processing
+            repo_id = await self._update_repo_status(session_id, "PROCESSING", repo_name)
+            
+            parsed_elements = self.parser.parse_directory(target_path)
+            documents = self.chunker.create_chunks(parsed_elements)
+            
+            if documents:
+                texts = [doc.page_content for doc in documents]
+                embeddings = self.embeddings.embed_documents(texts)
+                
+                async with AsyncSessionLocal() as db:
+                    # Clean up existing chunks for this session to support re-ingestion
+                    await db.execute(
+                        delete(DocumentChunk).where(DocumentChunk.session_id == session_id)
+                    )
+                    
+                    chunk_objs = []
+                    for doc, emb in zip(documents, embeddings):
+                        chunk_objs.append(DocumentChunk(
+                            repository_id=repo_id,
+                            session_id=session_id,
+                            file_path=doc.metadata.get("file_path"),
+                            name=doc.metadata.get("name"),
+                            type=doc.metadata.get("type"),
+                            content=doc.page_content,
+                            embedding=emb
+                        ))
+                    db.add_all(chunk_objs)
+                    await db.commit()
+                chunk_count = len(documents)
+            else:
+                chunk_count = 0
 
             files_processed = len(
                 {element["file_path"] for element in parsed_elements}
             )
             await self._update_repo_status(session_id, "completed", repo_name,
+            await self._update_repo_status(session_id, "COMPLETED", repo_name,
                 files_processed=files_processed,
                 chunks_created=chunk_count
             )
@@ -47,11 +97,13 @@ class IngestionService:
                 chunks_created=chunk_count,
                 repo_name=repo_name,
                 ingested_at=datetime.utcnow() 
+                ingested_at=datetime.now(timezone.utc)
             )
 
         except Exception as e:
             print(f"code ingstion has failed in codemind , {e}")
             await self._update_repo_status(session_id, "failed", repo_name)
+            await self._update_repo_status(session_id, "FAILED", repo_name)
             raise
 
 
@@ -79,6 +131,7 @@ class IngestionService:
     async def _update_repo_status(self, session_id: str, status: str, 
                                 repo_name: str, files_processed: int = 0, 
                                 chunks_created: int = 0):
+                                chunks_created: int = 0) -> int:
         async with AsyncSessionLocal() as db:
             stmt = select(Repository).where(Repository.session_id == session_id)
             result = await db.execute(stmt)
@@ -106,3 +159,5 @@ class IngestionService:
 
             await db.commit()
             await db.refresh(repo)
+            await db.refresh(repo)
+            return repo.id
