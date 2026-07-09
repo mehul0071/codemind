@@ -1,6 +1,6 @@
 from typing import List, Tuple
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
+from app.rag.embeddings import embeddings
 from app.config import settings
 from app.db.sessions import AsyncSessionLocal
 from app.db.models.document_chunk import DocumentChunk
@@ -9,9 +9,7 @@ from sqlalchemy import select
 
 class CodeRetriever:
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=settings.EMBEDDING_MODEL
-        )
+        self.embeddings = embeddings
 
     async def retrieve(self, query: str, session_id: str, k: int = 8) -> List[Document]:
         try:

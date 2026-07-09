@@ -1,4 +1,5 @@
 import os
+import asyncio
 from git import Repo
 from app.config import settings
 from datetime import datetime, timezone
@@ -9,7 +10,7 @@ from app.parsers.python_parser import PythonParser
 from app.rag.chunker import CodeChunker
 from app.schemas.repository import IngestRequest, IngestResponse
 from app.db.sessions import AsyncSessionLocal
-from langchain_huggingface import HuggingFaceEmbeddings
+from app.rag.embeddings import embeddings
 
 
 class IngestionService:
@@ -17,9 +18,8 @@ class IngestionService:
     def __init__(self):
         self.parser = PythonParser()
         self.chunker = CodeChunker()
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=settings.EMBEDDING_MODEL
-        )
+        self.embeddings = embeddings
+
 
     async def ingestion(self, request: IngestRequest) -> IngestResponse:
         session_id = request.session_id
@@ -31,7 +31,6 @@ class IngestionService:
             target_path = await self._prepare_repo(request)
             repo_name = os.path.basename(target_path)
             
-            # Update status to processing
             repo_id = await self._update_repo_status(session_id, "PROCESSING", repo_name)
             
             parsed_elements = self.parser.parse_directory(target_path)
@@ -42,7 +41,6 @@ class IngestionService:
                 embeddings = self.embeddings.embed_documents(texts)
                 
                 async with AsyncSessionLocal() as db:
-                    # Clean up existing chunks for this session to support re-ingestion
                     await db.execute(
                         delete(DocumentChunk).where(DocumentChunk.session_id == session_id)
                     )
@@ -102,8 +100,8 @@ class IngestionService:
                 print(f"repo you are trying to clone is already cloned, repo already exists at {clone_path}")
                 return clone_path
         
-            print(f"Cloning the requested repo{request.repo_url} ...")
-            Repo.clone_from(request.repo_url, clone_path)
+            print(f"Cloning the requested repo {request.repo_url} ...")
+            await asyncio.to_thread(Repo.clone_from, request.repo_url, clone_path)
             return clone_path
         
         raise ValueError("Please provide either repo_url or local_path")
