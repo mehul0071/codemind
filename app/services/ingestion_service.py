@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 from sqlalchemy import select, delete
 from app.db.models.repository import Repository
 from app.db.models.document_chunk import DocumentChunk
+from app.db.models.code_relation import CodeRelation
 from app.parsers.python_parser import PythonParser
+from app.parsers.dependency_parser import DependencyParser
 from app.rag.chunker import CodeChunker
 from app.schemas.repository import IngestRequest, IngestResponse
 from app.db.sessions import AsyncSessionLocal
@@ -36,14 +38,60 @@ class IngestionService:
             parsed_elements = self.parser.parse_directory(target_path)
             documents = self.chunker.create_chunks(parsed_elements)
             
-            if documents:
-                texts = [doc.page_content for doc in documents]
-                embeddings = self.embeddings.embed_documents(texts)
+            # Parse dependencies/relations
+            dep_parser = DependencyParser(repo_path=target_path)
+            dep_map = dep_parser.parse_directory()
+            
+            relation_objs = []
+            for file_rel_path, file_data in dep_map.items():
+                # Store local file imports
+                for imp in file_data.get("imports", []):
+                    if imp.get("is_local") and imp.get("resolved_project_relative_path"):
+                        relation_objs.append(CodeRelation(
+                            repository_id=repo_id,
+                            session_id=session_id,
+                            source_type="file",
+                            source_name=file_rel_path,
+                            target_type="file",
+                            target_name=imp["resolved_project_relative_path"],
+                            relation_type="imports",
+                            metadata_info={
+                                "line": imp.get("line"),
+                                "imported_name": imp.get("imported_name"),
+                                "alias": imp.get("alias"),
+                                "module": imp.get("module")
+                            }
+                        ))
                 
-                async with AsyncSessionLocal() as db:
-                    await db.execute(
-                        delete(DocumentChunk).where(DocumentChunk.session_id == session_id)
-                    )
+                # Store class inheritance relationships
+                for cls in file_data.get("classes", []):
+                    for resolved_base in cls.get("resolved_bases", []):
+                        relation_objs.append(CodeRelation(
+                            repository_id=repo_id,
+                            session_id=session_id,
+                            source_type="class",
+                            source_name=cls["name"],
+                            target_type="class",
+                            target_name=resolved_base,
+                            relation_type="inherits",
+                            metadata_info={
+                                "line": cls.get("line"),
+                                "end_line": cls.get("end_line"),
+                                "file_path": file_rel_path
+                            }
+                        ))
+
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    delete(DocumentChunk).where(DocumentChunk.session_id == session_id)
+                )
+                await db.execute(
+                    delete(CodeRelation).where(CodeRelation.session_id == session_id)
+                )
+                
+                if documents:
+                    texts = [doc.page_content for doc in documents]
+                    embeddings = self.embeddings.embed_documents(texts)
                     
                     chunk_objs = []
                     for doc, emb in zip(documents, embeddings):
@@ -57,10 +105,14 @@ class IngestionService:
                             embedding=emb
                         ))
                     db.add_all(chunk_objs)
-                    await db.commit()
-                chunk_count = len(documents)
-            else:
-                chunk_count = 0
+                    chunk_count = len(documents)
+                else:
+                    chunk_count = 0
+
+                if relation_objs:
+                    db.add_all(relation_objs)
+                
+                await db.commit()
 
             files_processed = len(
                 {element["file_path"] for element in parsed_elements}
