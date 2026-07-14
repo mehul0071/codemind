@@ -8,6 +8,9 @@ class DependencyVisitor(ast.NodeVisitor):
     def __init__(self):
         self.imports = []
         self.classes = []
+        self.calls = []
+        self._current_class = None
+        self._current_function = None
 
 
     def visit_Import(self, node: ast.Import):
@@ -51,6 +54,45 @@ class DependencyVisitor(ast.NodeVisitor):
             "line": node.lineno,
             "end_line": getattr(node, "end_lineno", node.lineno)
         })
+        
+        old_class = self._current_class
+        self._current_class = node.name
+        self.generic_visit(node)
+        self._current_class = old_class
+
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        old_func = self._current_function
+        func_name = f"{self._current_class}.{node.name}" if self._current_class else node.name
+        self._current_function = func_name
+        self.generic_visit(node)
+        self._current_function = old_func
+
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        old_func = self._current_function
+        func_name = f"{self._current_class}.{node.name}" if self._current_class else node.name
+        self._current_function = func_name
+        self.generic_visit(node)
+        self._current_function = old_func
+
+
+    def visit_Call(self, node: ast.Call):
+        if self._current_function:
+            called_name = None
+            if isinstance(node.func, ast.Name):
+                called_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                called_name = node.func.attr
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "self":
+                    called_name = f"self.{node.func.attr}"
+            
+            if called_name:
+                self.calls.append({
+                    "caller": self._current_function,
+                    "callee": called_name,
+                    "line": node.lineno
+                })
         self.generic_visit(node)
 
 
@@ -218,7 +260,8 @@ class DependencyParser:
                 "file_path": file_path_abs,
                 "project_relative_path": file_rel,
                 "imports": resolved_imports,
-                "classes": resolved_classes
+                "classes": resolved_classes,
+                "calls": visitor.calls
             }
 
         except Exception as e:
@@ -228,6 +271,7 @@ class DependencyParser:
                 "project_relative_path": os.path.relpath(file_path_abs, self.repo_path) if self.repo_path and os.path.isabs(file_path_abs) else None,
                 "imports": [],
                 "classes": [],
+                "calls": [],
                 "error": str(e)
             }
 

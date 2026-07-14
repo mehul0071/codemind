@@ -38,13 +38,11 @@ class IngestionService:
             parsed_elements = self.parser.parse_directory(target_path)
             documents = self.chunker.create_chunks(parsed_elements)
             
-            # Parse dependencies/relations
             dep_parser = DependencyParser(repo_path=target_path)
             dep_map = dep_parser.parse_directory()
             
             relation_objs = []
             for file_rel_path, file_data in dep_map.items():
-                # Store local file imports
                 for imp in file_data.get("imports", []):
                     if imp.get("is_local") and imp.get("resolved_project_relative_path"):
                         relation_objs.append(CodeRelation(
@@ -63,7 +61,6 @@ class IngestionService:
                             }
                         ))
                 
-                # Store class inheritance relationships
                 for cls in file_data.get("classes", []):
                     for resolved_base in cls.get("resolved_bases", []):
                         relation_objs.append(CodeRelation(
@@ -80,6 +77,21 @@ class IngestionService:
                                 "file_path": file_rel_path
                             }
                         ))
+                
+                for call in file_data.get("calls", []):
+                    relation_objs.append(CodeRelation(
+                        repository_id=repo_id,
+                        session_id=session_id,
+                        source_type="function",
+                        source_name=call["caller"],
+                        target_type="function",
+                        target_name=call["callee"],
+                        relation_type="calls",
+                        metadata_info={
+                            "line": call.get("line"),
+                            "file_path": file_rel_path
+                        }
+                    ))
 
             async with AsyncSessionLocal() as db:
                 await db.execute(
