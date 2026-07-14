@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.schemas.repository import IngestRequest
+from app.schemas.repository import IngestRequest, IngestAcceptedResponse, IngestStatusResponse
 from app.services.ingestion_service import IngestionService
 from app.db.sessions import get_db
 from app.db.models.repository import Repository
@@ -9,7 +9,7 @@ from app.db.models.repository import Repository
 router = APIRouter()
 
 
-@router.post("/ingest_code", status_code=202)
+@router.post("/ingest_code", status_code=202, response_model=IngestAcceptedResponse)
 async def ingest_codebase(request: IngestRequest, background_tasks: BackgroundTasks):
     try:
         service = IngestionService()
@@ -26,7 +26,7 @@ async def ingest_codebase(request: IngestRequest, background_tasks: BackgroundTa
         )
 
 
-@router.get("/status/{session_id}")
+@router.get("/status/{session_id}", response_model=IngestStatusResponse)
 async def get_ingestion_status(session_id: str, db: AsyncSession = Depends(get_db)):
     try:
         stmt = select(Repository).where(Repository.session_id == session_id)

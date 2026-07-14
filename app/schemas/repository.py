@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class IngestRequest(BaseModel):
@@ -22,3 +22,19 @@ class IngestResponse(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+
+class IngestAcceptedResponse(BaseModel):
+    status: str
+    message: str
+    session_id: str
+
+
+class IngestStatusResponse(BaseModel):
+    session_id: str
+    status: str
+    repo_url: Optional[str] = None
+    local_path: Optional[str] = None
+    metadata: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
