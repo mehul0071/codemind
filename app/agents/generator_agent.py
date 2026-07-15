@@ -9,13 +9,15 @@ async def generator_agent(state: AgentState) -> Dict[str, Any]:
     analysis_str = state.get("analysis") or "None"
     feedback_str = state.get("review_feedback") or "None"
     lint_str = str(state.get("lint_results")) if state.get("lint_results") else "None"
+    test_str = str(state.get("test_results")) if state.get("test_results") else "None"
     
     user_content = (
         f"User Request: {state['query']}\n\n"
         f"Architectural Analysis:\n{analysis_str}\n\n"
         f"Retrieved Code Context:\n{context_str}\n\n"
         f"Previous Reviewer Feedback:\n{feedback_str}\n\n"
-        f"Previous Linter/Compile Results:\n{lint_str}"
+        f"Previous Linter/Compile Results:\n{lint_str}\n\n"
+        f"Previous Test Runner Results:\n{test_str}"
     )
     
     response = client.chat.completions.create(

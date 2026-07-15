@@ -9,6 +9,7 @@ class AgentState(TypedDict):
     analysis: Optional[str]
     generated_patch: Optional[str]
     lint_results: Optional[Dict[str, Any]]
+    test_results: Optional[Dict[str, Any]]
     review_feedback: Optional[str]
     iteration_count: int
     is_complete: bool

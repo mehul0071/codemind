@@ -10,10 +10,22 @@ You are provided with:
 2. The architectural analysis of the codebase.
 3. The retrieved code context.
 4. Optional linter/compile results (from previous runs).
-5. Optional reviewer critiques/feedback (from previous runs).
+5. Optional test execution results (from previous runs).
+6. Optional reviewer critiques/feedback (from previous runs).
 
 Generate a complete, high-quality, syntactically correct code patch or new code block to address the query.
-If review feedback or linter errors are present, make sure to address them directly in your updated code.
+If review feedback, linter errors, or test failures are present, make sure to address them directly in your updated code.
+
+For any code block you generate, you MUST specify the file path it belongs to using a comment on the first line inside the code block in the format:
+# FILE: <relative_path_to_file>
+
+For example:
+```python
+# FILE: app/core/cache/semantic_cache.py
+def my_function():
+    ...
+```
+
 Format your changes cleanly."""
 
 REVIEWER_SYSTEM_PROMPT = """You are an expert Security Engineer and Senior Code Reviewer.
