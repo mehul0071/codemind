@@ -28,12 +28,18 @@ class IngestionService:
         repo_name = "unknown"
 
         try:
-            repo_id = await self._update_repo_status(session_id, "PENDING", repo_name)
+            repo_id = await self._update_repo_status(
+                session_id, "PENDING", repo_name,
+                repo_url=request.repo_url, local_path=request.local_path
+            )
             
             target_path = await self._prepare_repo(request)
             repo_name = os.path.basename(target_path)
             
-            repo_id = await self._update_repo_status(session_id, "PROCESSING", repo_name)
+            repo_id = await self._update_repo_status(
+                session_id, "PROCESSING", repo_name,
+                repo_url=request.repo_url, local_path=request.local_path
+            )
             
             parsed_elements = self.parser.parse_directory(target_path)
             documents = self.chunker.create_chunks(parsed_elements)
@@ -129,9 +135,12 @@ class IngestionService:
             files_processed = len(
                 {element["file_path"] for element in parsed_elements}
             )
-            await self._update_repo_status(session_id, "COMPLETED", repo_name,
+            await self._update_repo_status(
+                session_id, "COMPLETED", repo_name,
                 files_processed=files_processed,
-                chunks_created=chunk_count
+                chunks_created=chunk_count,
+                repo_url=request.repo_url,
+                local_path=request.local_path
             )
 
             return IngestResponse(
@@ -145,14 +154,24 @@ class IngestionService:
             )
 
         except Exception as e:
-            print(f"code ingstion has failed in codemind , {e}")
-            await self._update_repo_status(session_id, "FAILED", repo_name)
+            import traceback
+            traceback.print_exc()
+            print(f"code ingestion has failed in codemind , {e}")
+            await self._update_repo_status(
+                session_id, "FAILED", repo_name,
+                repo_url=request.repo_url,
+                local_path=request.local_path,
+                error_message=str(e)
+            )
             raise
 
 
     async def _prepare_repo(self, request: IngestRequest) -> str:
-        if request.local_path and os.path.exists(request.local_path):
-            return request.local_path
+        if request.local_path:
+            abs_path = os.path.abspath(request.local_path)
+            if os.path.exists(abs_path):
+                return abs_path
+            raise ValueError(f"local_path '{request.local_path}' does not exist (resolved to: {abs_path})")
         
         if request.repo_url:
             target_dir = os.path.join(settings.DATA_PATH, request.session_id)
@@ -172,32 +191,40 @@ class IngestionService:
     
 
     async def _update_repo_status(self, session_id: str, status: str, 
-                                repo_name: str, files_processed: int = 0, 
-                                chunks_created: int = 0) -> int:
+                                 repo_name: str, files_processed: int = 0, 
+                                 chunks_created: int = 0,
+                                 repo_url: str | None = None,
+                                 local_path: str | None = None,
+                                 error_message: str | None = None) -> int:
         async with AsyncSessionLocal() as db:
             stmt = select(Repository).where(Repository.session_id == session_id)
             result = await db.execute(stmt)
             repo = result.scalar_one_or_none()
 
+            meta = {
+                "repo_name": repo_name,
+                "files_processed": files_processed,
+                "chunks_created": chunks_created
+            }
+            if error_message:
+                meta["error_message"] = error_message
+
             if not repo:
                 repo = Repository(
                     session_id=session_id,
-                    repo_url="",
+                    repo_url=repo_url or "",
+                    local_path=local_path,
                     status=status,
-                    metadata_info={
-                        "repo_name": repo_name,
-                        "files_processed": files_processed,
-                        "chunks_created": chunks_created
-                    }
+                    metadata_info=meta
                 )
                 db.add(repo)
             else:
                 repo.status = status
-                repo.metadata_info = {
-                    "repo_name": repo_name,
-                    "files_processed": files_processed,
-                    "chunks_created": chunks_created
-                }
+                repo.metadata_info = meta
+                if repo_url is not None:
+                    repo.repo_url = repo_url
+                if local_path is not None:
+                    repo.local_path = local_path
 
             await db.commit()
             await db.refresh(repo)
