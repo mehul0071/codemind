@@ -1,4 +1,4 @@
-from app.agents.graph import AgentState
+from app.agents.state import AgentState
 from app.llm.client import client, model_name
 from app.llm.prompts import REVIEWER_SYSTEM_PROMPT
 from typing import Dict, Any
