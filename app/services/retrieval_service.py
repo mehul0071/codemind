@@ -4,6 +4,9 @@ from app.rag.retriever import CodeRetriever
 from app.rag.prompts import get_system_prompt, get_query_prompt
 from app.config import settings
 from app.utils.helpers import logger
+from app.db.sessions import AsyncSessionLocal
+from app.db.models.repository import Repository
+from sqlalchemy import select
 from groq import Groq
 import json
 
@@ -28,8 +31,22 @@ class RetrievalService:
         
         return "\n".join(context_parts)
 
-    async def get_answer(self, query: str, session_id: str) -> Dict[str, Any]:
+    async def get_answer(self, query: str, session_id: str, user_id: str) -> Dict[str, Any]:
         try:
+            async with AsyncSessionLocal() as db:
+                stmt = select(Repository).where(
+                    Repository.session_id == session_id,
+                    Repository.user_id == user_id
+                )
+                result = await db.execute(stmt)
+                if not result.scalar_one_or_none():
+                    return {
+                        "answer": "Unauthorized or repository not found.",
+                        "sources": [],
+                        "success": False,
+                        "num_sources": 0,
+                    }
+
             documents = await self.retriever.retrieve(
                 query=query,
                 session_id=session_id,

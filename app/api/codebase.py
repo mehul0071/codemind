@@ -5,15 +5,17 @@ from app.schemas.repository import IngestRequest, IngestAcceptedResponse, Ingest
 from app.services.ingestion_service import IngestionService
 from app.db.sessions import get_db
 from app.db.models.repository import Repository
+from app.db.models.user import User
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
 
 @router.post("/ingest_code", status_code=202, response_model=IngestAcceptedResponse)
-async def ingest_codebase(request: IngestRequest, background_tasks: BackgroundTasks):
+async def ingest_codebase(request: IngestRequest, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
     try:
         service = IngestionService()
-        background_tasks.add_task(service.ingestion, request)
+        background_tasks.add_task(service.ingestion, request, str(current_user.id))
         return {
             "status": "accepted",
             "message": "code ingestion is successfully started in the background",
@@ -27,9 +29,12 @@ async def ingest_codebase(request: IngestRequest, background_tasks: BackgroundTa
 
 
 @router.get("/status/{session_id}", response_model=IngestStatusResponse)
-async def get_ingestion_status(session_id: str, db: AsyncSession = Depends(get_db)):
+async def get_ingestion_status(session_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
-        stmt = select(Repository).where(Repository.session_id == session_id)
+        stmt = select(Repository).where(
+            Repository.session_id == session_id,
+            Repository.user_id == current_user.id
+        )
         result = await db.execute(stmt)
         repo = result.scalar_one_or_none()
 

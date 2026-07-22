@@ -1,11 +1,31 @@
 from typing import Dict, Any
 from app.agents.graph import app_graph
 from app.agents.state import AgentState
+from app.db.sessions import AsyncSessionLocal
+from app.db.models.repository import Repository
+from sqlalchemy import select
 
 
 class PlanningService:
     
-    async def run(self, query: str, session_id: str) -> Dict[str, Any]:
+    async def run(self, query: str, session_id: str, user_id: str) -> Dict[str, Any]:
+        async with AsyncSessionLocal() as db:
+            stmt = select(Repository).where(
+                Repository.session_id == session_id,
+                Repository.user_id == user_id
+            )
+            result = await db.execute(stmt)
+            if not result.scalar_one_or_none():
+                return {
+                    "is_complete": False,
+                    "task_type": "UNKNOWN",
+                    "generated_patch": None,
+                    "review_feedback": "Unauthorized or repository not found.",
+                    "iteration_count": 0,
+                    "files_retrieved": [],
+                    "analysis": "Unauthorized."
+                }
+
         initial_state: AgentState = {
             "query": query,
             "session_id": session_id,

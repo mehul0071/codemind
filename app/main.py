@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.api import codebase, query
+from app.api import codebase, query, auth
 from app.api import agent, health
 from app.middleware.auth import APIKeyMiddleware
 from app.utils.rate_limit import limiter
@@ -57,12 +57,13 @@ async def request_logging_middleware(request: Request, call_next):
 
 
 # ── Routers ────────────────────────────────────────────────────────────────
-app.include_router(health.router, tags=["health"])
-app.include_router(codebase.router, prefix="/api/v1", tags=["codebase"])
-app.include_router(query.router, prefix="/api/v1", tags=["query"])
-app.include_router(agent.router, prefix="/api/v1/agent", tags=["agent"])
-
 
 @app.get("/")
 async def root():
     return {"message": "CodeMind API is running", "docs": "/docs", "health": "/health"}
+
+app.include_router(health.router, tags=["health"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(codebase.router, prefix="/api/v1", tags=["codebase"])
+app.include_router(query.router, prefix="/api/v1", tags=["query"])
+app.include_router(agent.router, prefix="/api/v1/agent", tags=["agent"])

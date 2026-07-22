@@ -24,14 +24,15 @@ class IngestionService:
         self.embeddings = embeddings
 
 
-    async def ingestion(self, request: IngestRequest) -> IngestResponse:
+    async def ingestion(self, request: IngestRequest, user_id: str) -> IngestResponse:
         session_id = request.session_id
         repo_name = "unknown"
 
         try:
             repo_id = await self._update_repo_status(
                 session_id, "PENDING", repo_name,
-                repo_url=request.repo_url, local_path=request.local_path
+                repo_url=request.repo_url, local_path=request.local_path,
+                user_id=user_id
             )
             
             target_path = await self._prepare_repo(request)
@@ -39,7 +40,8 @@ class IngestionService:
             
             repo_id = await self._update_repo_status(
                 session_id, "PROCESSING", repo_name,
-                repo_url=request.repo_url, local_path=request.local_path
+                repo_url=request.repo_url, local_path=request.local_path,
+                user_id=user_id
             )
             
             parsed_elements = self.parser.parse_directory(target_path)
@@ -141,7 +143,8 @@ class IngestionService:
                 files_processed=files_processed,
                 chunks_created=chunk_count,
                 repo_url=request.repo_url,
-                local_path=request.local_path
+                local_path=request.local_path,
+                user_id=user_id
             )
 
             return IngestResponse(
@@ -162,7 +165,8 @@ class IngestionService:
                 session_id, "FAILED", repo_name,
                 repo_url=request.repo_url,
                 local_path=request.local_path,
-                error_message=str(e)
+                error_message=str(e),
+                user_id=user_id
             )
             raise
 
@@ -196,7 +200,8 @@ class IngestionService:
                                  chunks_created: int = 0,
                                  repo_url: str | None = None,
                                  local_path: str | None = None,
-                                 error_message: str | None = None) -> int:
+                                 error_message: str | None = None,
+                                 user_id: str | None = None) -> int:
         async with AsyncSessionLocal() as db:
             stmt = select(Repository).where(Repository.session_id == session_id)
             result = await db.execute(stmt)
@@ -216,7 +221,8 @@ class IngestionService:
                     repo_url=repo_url or "",
                     local_path=local_path,
                     status=status,
-                    metadata_info=meta
+                    metadata_info=meta,
+                    user_id=user_id
                 )
                 db.add(repo)
             else:
