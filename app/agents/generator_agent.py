@@ -6,20 +6,38 @@ from typing import Dict, Any
 
 async def generator_agent(state: AgentState) -> Dict[str, Any]:
     context_str = "\n\n".join(state.get("retrieved_context", []))
-    analysis_str = state.get("analysis") or "None"
-    feedback_str = state.get("review_feedback") or "None"
-    lint_str = str(state.get("lint_results")) if state.get("lint_results") else "None"
-    test_str = str(state.get("test_results")) if state.get("test_results") else "None"
-    
-    user_content = (
-        f"User Request: {state['query']}\n\n"
-        f"Architectural Analysis:\n{analysis_str}\n\n"
-        f"Retrieved Code Context:\n{context_str}\n\n"
-        f"Previous Reviewer Feedback:\n{feedback_str}\n\n"
-        f"Previous Linter/Compile Results:\n{lint_str}\n\n"
-        f"Previous Test Runner Results:\n{test_str}"
-    )
-    
+    analysis_str = state.get("analysis") or "No architectural analysis available."
+    current_iterations = state.get("iteration_count", 0)
+
+    sections = [
+        f"User Request: {state['query']}",
+        f"Architectural Analysis:\n{analysis_str}",
+        f"Retrieved Code Context:\n{context_str}",
+    ]
+
+    review_feedback = state.get("review_feedback")
+    lint_results = state.get("lint_results")
+    test_results = state.get("test_results")
+
+    if current_iterations > 0:
+        sections.append(
+            "--- PREVIOUS ATTEMPT FAILED — FIX THE ISSUES BELOW ---\n"
+            "Your previous code generation was rejected. You MUST address all issues listed below "
+            "before outputting the new code patch."
+        )
+
+    if review_feedback and review_feedback.strip():
+        sections.append(f"Reviewer Critique:\n{review_feedback}")
+
+    if lint_results and not lint_results.get("success", True):
+        errors = "\n".join(lint_results.get("errors", []))
+        sections.append(f"Linter / Compile Errors to Fix:\n{errors}")
+
+    if test_results and not test_results.get("success", True):
+        sections.append(f"Failing Unit Tests Output:\n{test_results.get('output', '')}")
+
+    user_content = "\n\n".join(sections)
+
     response = client.chat.completions.create(
         model=model_name,
         messages=[
@@ -29,11 +47,10 @@ async def generator_agent(state: AgentState) -> Dict[str, Any]:
         temperature=0.2,
         max_tokens=2048
     )
-    
+
     patch = response.choices[0].message.content.strip()
-    current_iterations = state.get("iteration_count", 0)
-    
+
     return {
         "generated_patch": patch,
-        "iteration_count": current_iterations + 1
+        "iteration_count": current_iterations + 1,
     }

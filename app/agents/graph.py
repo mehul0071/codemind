@@ -1,5 +1,6 @@
 from langgraph.graph import StateGraph, START, END
 from app.agents.state import AgentState
+from app.agents.planner_agent import planner_agent
 from app.agents.retriever_agent import retriever_agent
 from app.agents.architecture_agent import analyzer_agent
 from app.agents.generator_agent import generator_agent
@@ -16,6 +17,7 @@ def route_after_review(state: AgentState) -> str:
 
 workflow = StateGraph(AgentState)
 
+workflow.add_node("planner", planner_agent)
 workflow.add_node("retriever", retriever_agent)
 workflow.add_node("analyzer", analyzer_agent)
 workflow.add_node("generator", generator_agent)
@@ -23,7 +25,8 @@ workflow.add_node("syntax_checker", syntax_check_agent)
 workflow.add_node("sandbox_runner", sandbox_agent)
 workflow.add_node("reviewer", reviewer_agent)
 
-workflow.add_edge(START, "retriever")
+workflow.add_edge(START, "planner")
+workflow.add_edge("planner", "retriever")
 workflow.add_edge("retriever", "analyzer")
 workflow.add_edge("analyzer", "generator")
 workflow.add_edge("generator", "syntax_checker")
@@ -35,8 +38,8 @@ workflow.add_conditional_edges(
     route_after_review,
     {
         END: END,
-        "generator": "generator"
-    }
+        "generator": "generator",
+    },
 )
 
 app_graph = workflow.compile()

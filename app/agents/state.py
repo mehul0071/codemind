@@ -4,6 +4,7 @@ from typing import TypedDict, List, Dict, Any, Optional
 class AgentState(TypedDict):
     query: str
     session_id: str
+    task_type: Optional[str]
     files_retrieved: List[str]
     retrieved_context: List[str]
     analysis: Optional[str]

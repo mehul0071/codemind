@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL with pgvector extension ─────────────────────────────────────
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: codemind_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codemind
+      POSTGRES_USER: ${POSTGRES_USER:-mehul}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mehul0071}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mehul} -d codemind"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── CodeMind FastAPI Application ────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: codemind_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mehul}:${POSTGRES_PASSWORD:-mehul0071}@postgres:5432/codemind
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      MODEL_NAME: ${MODEL_NAME:-llama-3.3-70b-versatile}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      DATA_PATH: /app/data
+      WORKSPACE_PATH: /app
+      API_KEY: ${API_KEY:-}
+      LANGCHAIN_TRACING_V2: ${LANGCHAIN_TRACING_V2:-false}
+      LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY:-}
+      LANGCHAIN_PROJECT: ${LANGCHAIN_PROJECT:-codemind}
+    ports:
+      - "8000:8000"
+    volumes:
+      - repo_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    name: codemind_postgres_data
+  repo_data:
+    name: codemind_repo_data

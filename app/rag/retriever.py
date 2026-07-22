@@ -3,6 +3,7 @@ import networkx as nx
 from typing import List, Tuple, Optional, Set
 from langchain_core.documents import Document
 from app.rag.embeddings import embeddings
+from app.rag.reranker import CodeReranker
 from app.config import settings
 from app.db.sessions import AsyncSessionLocal
 from app.db.models.document_chunk import DocumentChunk
@@ -14,6 +15,7 @@ from sqlalchemy import select, or_, and_
 class CodeRetriever:
     def __init__(self):
         self.embeddings = embeddings
+        self.reranker = CodeReranker()
 
     async def _get_repo_path(self, session_id: str) -> str:
         async with AsyncSessionLocal() as db:
@@ -78,23 +80,19 @@ class CodeRetriever:
                 except Exception:
                     chunk_rel_path = chunk.file_path
 
-            # 1. Class inheritance
             if chunk.type == "class" and chunk.name:
                 if chunk.name in G:
-                    # Parents (outgoing inherits edges)
                     parents = [
                         v for u, v, d in G.out_edges(chunk.name, data=True)
                         if d.get("relation_type") == "inherits"
                     ]
                     classes_to_fetch.update(parents)
-                    # Subclasses (incoming inherits edges)
                     subclasses = [
                         u for u, v, d in G.in_edges(chunk.name, data=True)
                         if d.get("relation_type") == "inherits"
                     ]
                     classes_to_fetch.update(subclasses)
 
-            # 2. Function/Method calls
             elif chunk.type in ["function", "async_function"] and chunk.name:
                 matching_nodes = []
                 for node in G.nodes:
@@ -102,20 +100,17 @@ class CodeRetriever:
                         matching_nodes.append(node)
                 
                 for node in matching_nodes:
-                    # Called functions (outgoing calls edges)
                     called = [
                         v for u, v, d in G.out_edges(node, data=True)
                         if d.get("relation_type") == "calls"
                     ]
                     functions_to_fetch.update(called)
-                    # Calling functions (incoming calls edges)
                     calling = [
                         u for u, v, d in G.in_edges(node, data=True)
                         if d.get("relation_type") == "calls"
                     ]
                     functions_to_fetch.update(calling)
 
-            # 3. File imports & specific imported names
             if chunk_rel_path and chunk_rel_path in G:
                 imports = [
                     (v, d) for u, v, d in G.out_edges(chunk_rel_path, data=True)
@@ -129,7 +124,6 @@ class CodeRetriever:
                     else:
                         files_to_fetch.add(target_file)
 
-        # Build DB query conditions
         conditions = []
         if classes_to_fetch:
             conditions.append(and_(
@@ -178,7 +172,6 @@ class CodeRetriever:
                 result = await db.execute(stmt)
                 expanded_chunks = result.scalars().all()
 
-        # Deduplicate expanded chunks against original chunks
         original_keys = {
             (c.file_path, c.name, c.type) for c in chunks
         }
@@ -198,32 +191,36 @@ class CodeRetriever:
 
     async def retrieve(self, query: str, session_id: str, k: int = 8) -> List[Document]:
         try:
+            candidate_k = max(k * 2, 20)
             query_embedding = self.embeddings.embed_query(query)
             async with AsyncSessionLocal() as db:
                 stmt = (
                     select(DocumentChunk)
                     .where(DocumentChunk.session_id == session_id)
                     .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
-                    .limit(k)
+                    .limit(candidate_k)
                 )
                 result = await db.execute(stmt)
                 chunks = result.scalars().all()
 
-            # Expand chunks via relational graph
             expanded_chunks = await self._expand_context(chunks, session_id)
-                
-            docs = []
-            for chunk in expanded_chunks:
-                docs.append(Document(
+
+            docs = [
+                Document(
                     page_content=chunk.content,
                     metadata={
                         "name": chunk.name,
                         "type": chunk.type,
                         "file_path": chunk.file_path,
-                        "session_id": chunk.session_id
-                    }
-                ))
-            return docs
+                        "session_id": chunk.session_id,
+                    },
+                )
+                for chunk in expanded_chunks
+            ]
+
+            reranked_docs = await self.reranker.rerank(query, docs, top_n=k)
+            return reranked_docs
+
         except Exception as e:
             print(f"Error in retrieve: {e}")
             return []

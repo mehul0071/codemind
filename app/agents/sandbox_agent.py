@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 from typing import Dict, Any
 from app.agents.state import AgentState
+from app.config import settings
 
 
 def parse_patch(patch_str: str) -> Dict[str, str]:
@@ -86,7 +87,7 @@ async def sandbox_agent(state: AgentState) -> Dict[str, Any]:
                 
         cmd = [
             "docker", "run", "--rm",
-            "-v", "/home/incipient/python/genai/codemind:/workspace:ro",
+            "-v", f"{settings.WORKSPACE_PATH}:/workspace:ro",
             "-v", f"{sandbox_dir_abs}:/app",
             "-w", "/app",
             "-e", "PYTHONPATH=/app:/workspace/myenv/lib/python3.12/site-packages",

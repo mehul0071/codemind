@@ -1,4 +1,3 @@
-# app/services/retrieval_service.py
 from typing import Dict, List, Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.rag.retriever import CodeRetriever
@@ -6,6 +5,7 @@ from app.rag.prompts import get_system_prompt, get_query_prompt
 from app.config import settings
 from groq import Groq
 import json
+
 
 class RetrievalService:
     def __init__(self):
@@ -39,7 +39,8 @@ class RetrievalService:
                 return {
                     "answer": "I couldn't find any relevant code for this query in the provided codebase.",
                     "sources": [],
-                    "success": False
+                    "success": False,
+                    "num_sources": 0,
                 }
 
             context = self._format_context(documents)
@@ -78,8 +79,10 @@ class RetrievalService:
             return {
                 "answer": f"An error occurred while processing your query: {str(e)}",
                 "sources": [],
-                "success": False
+                "success": False,
+                "num_sources": 0,
             }
+
 
     async def get_answer_with_citations(self, query: str, session_id: str) -> Dict[str, Any]:
         try:
@@ -90,14 +93,14 @@ class RetrievalService:
 
             context = self._format_context(documents)
             system_prompt = get_system_prompt()
-            enhanced_prompt = f"""{get_query_prompt(query, context)}
-
-                                Please format your response as JSON with:
-                                {{
-                                "answer": "your detailed answer here",
-                                "citations": ["file_path1", "file_path2"]
-                                }}
-                               """
+            enhanced_prompt = f"""
+                {get_query_prompt(query, context)}
+                Please format your response as JSON with:
+                {{
+                "answer": "your detailed answer here",
+                "citations": ["file_path1", "file_path2"]
+                }}
+            """
 
             response = self.llm_client.chat.completions.create(
                 model=self.model_name,
