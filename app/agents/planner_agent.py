@@ -1,6 +1,7 @@
 import json
 from app.agents.state import AgentState
 from app.llm.client import client, model_name
+from app.utils.helpers import logger
 from typing import Dict, Any
 
 
@@ -37,9 +38,9 @@ async def planner_agent(state: AgentState) -> Dict[str, Any]:
         parsed = json.loads(raw)
         task_type = parsed.get("task_type", "CODE_TASK")
         reasoning = parsed.get("reasoning", "")
-        print(f"[PlannerAgent] Classified as '{task_type}': {reasoning}")
+        logger.info(f"[PlannerAgent] Classified as '{task_type}': {reasoning}")
     except Exception as e:
-        print(f"[PlannerAgent] Classification failed ({e}), defaulting to CODE_TASK")
+        logger.error(f"[PlannerAgent] Classification failed ({e}), defaulting to CODE_TASK")
         task_type = "CODE_TASK"
 
     return {"task_type": task_type}

@@ -10,6 +10,7 @@ from app.db.models.document_chunk import DocumentChunk
 from app.db.models.code_relation import CodeRelation
 from app.db.models.repository import Repository
 from sqlalchemy import select, or_, and_
+from app.utils.helpers import logger
 
 
 class CodeRetriever:
@@ -222,7 +223,7 @@ class CodeRetriever:
             return reranked_docs
 
         except Exception as e:
-            print(f"Error in retrieve: {e}")
+            logger.error(f"Error in retrieve: {e}")
             return []
 
     async def retrieve_with_scores(self, query: str, session_id: str, k: int = 8) -> List[Tuple[Document, float]]:
@@ -263,7 +264,7 @@ class CodeRetriever:
                 docs_with_score.append((doc, score))
             return docs_with_score
         except Exception as e:
-            print(f"Error in retrieve_with_scores: {e}")
+            logger.error(f"Error in retrieve_with_scores: {e}")
             return []
 
     async def get_relevant_documents(self, query: str, session_id: str, k: int = 8) -> List[Document]:

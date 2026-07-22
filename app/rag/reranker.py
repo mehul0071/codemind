@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Tuple
 from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
+from app.utils.helpers import logger
 
 
 class CodeReranker:
@@ -14,9 +15,10 @@ class CodeReranker:
         if self._model is None:
             try:
                 self._model = CrossEncoder(self.model_name)
-                print(f"[CodeReranker] Loaded cross-encoder: {self.model_name}")
+                logger.info(f"[CodeReranker] Loaded cross-encoder: {self.model_name}")
             except Exception as e:
-                print(f"[CodeReranker] Failed to load cross-encoder: {e}. Reranking disabled.")
+                logger.error(f"[CodeReranker] Failed to load cross-encoder: {e}. Reranking disabled.")
+                self._model = None
         return self._model
 
     async def rerank(

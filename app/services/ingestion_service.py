@@ -2,6 +2,7 @@ import os
 import asyncio
 from git import Repo
 from app.config import settings
+from app.utils.helpers import logger
 from datetime import datetime, timezone
 from sqlalchemy import select, delete
 from app.db.models.repository import Repository
@@ -156,7 +157,7 @@ class IngestionService:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"code ingestion has failed in codemind , {e}")
+            logger.error(f"code ingestion has failed in codemind , {e}")
             await self._update_repo_status(
                 session_id, "FAILED", repo_name,
                 repo_url=request.repo_url,
@@ -180,10 +181,10 @@ class IngestionService:
             clone_path = os.path.join(target_dir, repo_name)
 
             if os.path.exists(clone_path):
-                print(f"repo you are trying to clone is already cloned, repo already exists at {clone_path}")
+                logger.info(f"repo you are trying to clone is already cloned, repo already exists at {clone_path}")
                 return clone_path
         
-            print(f"Cloning the requested repo {request.repo_url} ...")
+            logger.info(f"Cloning the requested repo {request.repo_url} ...")
             await asyncio.to_thread(Repo.clone_from, request.repo_url, clone_path)
             return clone_path
         

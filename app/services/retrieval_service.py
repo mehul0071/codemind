@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.rag.retriever import CodeRetriever
 from app.rag.prompts import get_system_prompt, get_query_prompt
 from app.config import settings
+from app.utils.helpers import logger
 from groq import Groq
 import json
 
@@ -75,7 +76,7 @@ class RetrievalService:
             }
 
         except Exception as e:
-            print(f"Error in get_answer: {e}")
+            logger.error(f"Error in get_answer: {e}")
             return {
                 "answer": f"An error occurred while processing your query: {str(e)}",
                 "sources": [],
@@ -122,5 +123,5 @@ class RetrievalService:
             }
 
         except Exception as e:
-            print(f"Error in get_answer_with_citations: {e}")
+            logger.error(f"Error in get_answer_with_citations: {e}")
             return {"answer": "Error generating structured response", "citations": [], "success": False}

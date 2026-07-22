@@ -1,5 +1,6 @@
 import ast
 import os
+from app.utils.helpers import logger
 from typing import Dict, Any, List, Optional
 
 
@@ -265,7 +266,7 @@ class DependencyParser:
             }
 
         except Exception as e:
-            print(f"Error parsing file {file_path_abs}: {e}")
+            logger.error(f"Error parsing file {file_path_abs}: {e}")
             return {
                 "file_path": file_path_abs,
                 "project_relative_path": os.path.relpath(file_path_abs, self.repo_path) if self.repo_path and os.path.isabs(file_path_abs) else None,

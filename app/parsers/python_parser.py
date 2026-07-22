@@ -1,5 +1,6 @@
 import ast
 import os
+from app.utils.helpers import logger
 from typing import List, Dict
 from pathlib import Path
 
@@ -42,7 +43,7 @@ class PythonParser:
             return elements
 
         except Exception as e:
-            print(f"Error parsing {file_path}: {e}")
+            logger.error(f"Error parsing {file_path}: {e}")
             return []
 
     def parse_directory(self, repo_path: str) -> List[Dict]:
