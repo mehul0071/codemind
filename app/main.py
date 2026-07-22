@@ -2,9 +2,12 @@ import logging
 import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from app.api import codebase, query
 from app.api import agent, health
 from app.middleware.auth import APIKeyMiddleware
+from app.utils.rate_limit import limiter
 
 # ── Logging setup ──────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -24,6 +27,10 @@ app = FastAPI(
     ),
     version="0.2.0",
 )
+
+# Attach rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Middleware ─────────────────────────────────────────────────────────────
 app.add_middleware(APIKeyMiddleware)

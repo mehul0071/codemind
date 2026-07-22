@@ -1,23 +1,26 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional, List
 from app.services.planning_service import PlanningService
+from app.schemas.agent import AgentGenerateRequest, AgentGenerateResponse
+from app.utils.rate_limit import limiter
 
 router = APIRouter()
 
 @router.post("/generate", response_model=AgentGenerateResponse)
-async def generate_code(request: AgentGenerateRequest):
+@limiter.limit("10/minute")
+async def generate_code(request: Request, payload: AgentGenerateRequest):
 
-    if not request.query.strip():
+    if not payload.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
-    if not request.session_id.strip():
+    if not payload.session_id.strip():
         raise HTTPException(status_code=400, detail="session_id cannot be empty.")
 
     try:
         service = PlanningService()
         result = await service.run(
-            query=request.query,
-            session_id=request.session_id,
+            query=payload.query,
+            session_id=payload.session_id,
         )
         return AgentGenerateResponse(
             task_type=result.get("task_type", "CODE_TASK"),
